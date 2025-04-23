@@ -1,0 +1,118 @@
+#!/usr/bin/env node
+
+const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
+const API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
+const PROJECT_NAME = process.env.CLOUDFLARE_PROJECT_NAME;
+
+const AuthHeaders = {
+  Authorization: `Bearer ${API_TOKEN}`,
+};
+
+const apiError = (code) => (error) => ({
+  code,
+  errors: [{ message: error.toString() }],
+});
+const apiHandleRequest = async (request) => {
+  const res = await request.catch(apiError(-1));
+  const code = res.status;
+  if (code < 0) return res;
+  let result = {};
+  try {
+    result = await res.json();
+  } finally {
+    return { ...result, code };
+  }
+};
+
+const apiDeleteDeployment = (DEPLOYMENT_ID) =>
+  apiHandleRequest(
+    fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/pages/projects/${PROJECT_NAME}/deployments/${DEPLOYMENT_ID}`,
+      { headers: { ...AuthHeaders }, method: "DELETE" }
+    )
+  );
+
+const apiGetDeployments = (page = 1) =>
+  apiHandleRequest(
+    fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/pages/projects/${PROJECT_NAME}/deployments?page=${page}`,
+      { headers: { ...AuthHeaders } }
+    )
+  );
+
+const getAllDeployments = async () => {
+  let result = new Map();
+  const getPage = async (page = 1) => {
+    console.info(`Request ${page} page`);
+    const res = await apiGetDeployments(page);
+    if (!res.result)
+      return console.error(
+        res.errors.map((e, i) => `${i + 1}: ${e.message}`).join("\n")
+      );
+    if (res.result.length === 0) return;
+    res.result.forEach((deployment) => result.set(deployment.id, deployment));
+    if (page + 1 > res.result_info.total_pages) return;
+    return getPage(page + 1);
+  };
+
+  await getPage();
+
+  return Array.from(result.values());
+};
+
+const args = Object.fromEntries(
+  process.argv.slice(2).map((arg) => {
+    const [param, ...values] = arg.split("=");
+    const value = values.join("=");
+    return [param, value];
+  })
+);
+
+const processParam = (param, values, deployments) => {
+  switch (param) {
+    case "-s":
+    case "--slice":
+      const [start, end] = values.split(",").map((e) => Number(e));
+      if (end) {
+        deployments = deployments.slice(start, end);
+      } else {
+        deployments = deployments.slice(start);
+      }
+      break;
+
+    case "--with-aliases":
+      deployments = deployments.filter(
+        ({ aliases }) => aliases && aliases.length
+      );
+      break;
+
+    case "--without-aliases":
+      deployments = deployments.filter(
+        ({ aliases }) => !aliases || !aliases.length
+      );
+      break;
+
+    default:
+      break;
+  }
+
+  return deployments;
+};
+
+const main = async () => {
+  let deployments = await getAllDeployments();
+  console.info(`All deployments: ${deployments.length}`);
+  for (let arg in args) deployments = processParam(arg, args[arg], deployments);
+  console.info(`Need to delete: ${deployments.length}`);
+
+  for (const deployment of deployments) {
+    if (args["--dry"] !== undefined) {
+      console.info(`[${deployment.id}] Will be deleted (dry run)`);
+    } else {
+      const success = !!(await apiDeleteDeployment(deployment.id)).success;
+      console.info(`[${deployment.id}] ${success ? "Deleted" : "Fail!"}`);
+    }
+  }
+};
+
+main();

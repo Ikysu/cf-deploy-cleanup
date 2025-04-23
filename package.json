@@ -1,0 +1,23 @@
+{
+  "name": "cf-deploy-cleanup",
+  "version": "1.0.0",
+  "description": "Allows you to simply remove unnecessary deployments from cloudflare pages!",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ikysu/cf-deploy-cleanup.git"
+  },
+  "keywords": [
+    "cf",
+    "cloudflare",
+    "pages",
+    "wrangler"
+  ],
+  "author": "Ikysu",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Ikysu/cf-deploy-cleanup/issues"
+  },
+  "bin": "cf-deploy-cleanup",
+  "homepage": "https://github.com/Ikysu/cf-deploy-cleanup#readme"
+}
